@@ -1,0 +1,78 @@
+global:
+  scrape_interval:     20s
+  evaluation_interval: 20s
+
+  # Attach these labels to any time series or alerts when communicating with
+  # external systems (federation, remote storage, Alertmanager). (name of the host)
+  external_labels:
+      monitor: 'Host server'
+
+# Load and evaluate rules in this file every 'evaluation_interval' seconds.
+rule_files:
+  - 'alerts/*.yml'
+
+# A scrape configuration containing exactly one endpoint to scrape.
+scrape_configs:
+  - job_name: 'external'
+    scrape_interval: 15s
+    basic_auth:
+      username: "prometheus"
+      password_file: 'exporters/password'
+    scheme: https
+    tls_config:
+      ca_file: 'exporters/ca.pem'
+    file_sd_configs:
+      - files:
+          - 'exporters/*.json'
+
+  - job_name: 'nodeexporter'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['nodeexporter:9100']
+
+  - job_name: 'cadvisor'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  - job_name: 'nginxexporter'
+    scrape_interval: 10s
+    static_configs:
+      - targets: [ 'nginxexporter:9113' ]
+
+  - job_name: 'prometheus'
+    scrape_interval: 1m
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  - job_name: 'blackbox'
+    scrape_interval: 1m
+    metrics_path: /probe
+    params:
+      module: [http_get]  # Look for a HTTP 200 response.
+    file_sd_configs:
+      - files: [ 'blackbox_targets.yml' ]
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: (.*)(:80)?
+        target_label: __param_target
+      - source_labels: [__param_target]
+        regex: (.*)
+        target_label: instance
+        replacement: ${1}
+      - source_labels: []
+        regex: .*
+        target_label: __address__
+        replacement: blackboxexporter:9115
+
+  - job_name: 'loki'
+    scrape_interval: 1m
+    static_configs:
+      - targets: ['loki:3100']
+
+alerting:
+  alertmanagers:
+  - scheme: http
+    static_configs:
+    - targets: 
+      - 'alertmanager:9093'
